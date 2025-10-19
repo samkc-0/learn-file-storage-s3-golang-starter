@@ -12,8 +12,9 @@ import (
 )
 
 type apiConfig struct {
-	db               database.Client
-	jwtSecret        string
+	db        database.Client
+	jwtSecret string
+
 	platform         string
 	filepathRoot     string
 	assetsRoot       string
