@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,11 +35,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// TODO: implement the upload here
 	tenMegabytes := int64(10 << 20)
 	r.ParseMultipartForm(tenMegabytes)
 
-	src, _, err := r.FormFile("thumbnail")
+	src, header, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "unable to parse form file", err)
 		return
@@ -51,8 +51,18 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "bad credentials", err)
 		return
 	}
-
-	path := filepath.Join(cfg.assetsRoot, videoIDString)
+	mimeType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "something went wrong parsing media type", err)
+		return
+	}
+	if !(mimeType == "image/jpeg" || mimeType == "image/png") {
+		respondWithError(w, http.StatusBadRequest, "media type must be image/png or image/jpeg, got: "+mimeType, nil)
+		return
+	}
+	filename := videoIDString + "." + mimeTypeToExt(mimeType)
+	path := filepath.Join(cfg.assetsRoot, filename)
+	fmt.Printf("writing to %s\n", path)
 	dst, err := os.Create(path)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create file", err)
@@ -64,7 +74,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "Couldn't copy file", err)
 		return
 	}
-	dataUrl := "http://localhost:" + cfg.port + "/assets/" + videoIDString
+	dataUrl := "http://localhost:" + cfg.port + "/assets/" + filename
 	metadata.ThumbnailURL = &dataUrl
 	err = cfg.db.UpdateVideo(metadata)
 
@@ -74,4 +84,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	respondWithJSON(w, http.StatusOK, metadata)
 
+}
+
+func mimeTypeToExt(mimeType string) string {
+	switch mimeType {
+	case "image/jpeg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	default:
+		return "bin"
+	}
 }
