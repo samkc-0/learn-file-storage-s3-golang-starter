@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -51,16 +53,22 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "bad credentials", err)
 		return
 	}
+
 	mimeType, _, err := mime.ParseMediaType(header.Header.Get("Content-Type"))
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "something went wrong parsing media type", err)
 		return
 	}
+
 	if !(mimeType == "image/jpeg" || mimeType == "image/png") {
 		respondWithError(w, http.StatusBadRequest, "media type must be image/png or image/jpeg, got: "+mimeType, nil)
 		return
 	}
-	filename := videoIDString + "." + mimeTypeToExt(mimeType)
+
+	bytesToGenerateNewFileID := make([]byte, 32)
+	rand.Read(bytesToGenerateNewFileID)
+	fileNameAsBase64 := base64.RawURLEncoding.EncodeToString(bytesToGenerateNewFileID)
+	filename := fileNameAsBase64 + "." + mimeTypeToExt(mimeType)
 	path := filepath.Join(cfg.assetsRoot, filename)
 	fmt.Printf("writing to %s\n", path)
 	dst, err := os.Create(path)
